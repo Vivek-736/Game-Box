@@ -9,7 +9,7 @@ import {
 
 export default function Page() {
   return (
-    <Empty className="flex min-h-svh">
+    <Empty className="flex min-h-[calc(100svh-3.5rem)]">
       <EmptyHeader>
         <EmptyMedia>
           <Image src="/logo.svg" alt="GameBox" width={48} height={48} />

@@ -1,12 +1,14 @@
 import type { Metadata } from "next"
 import { Roboto_Condensed } from "next/font/google"
+import { ClerkProvider } from "@clerk/nextjs"
+import { shadcn } from "@clerk/ui/themes"
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
+import { Header } from "@/components/header"
 import { cn } from "@/lib/utils"
 
 const robotoCondensed = Roboto_Condensed({
   subsets: ["latin"],
-  display: "swap",
   weight: ["300", "400", "500", "600", "700", "800", "900"],
   variable: "--font-roboto-condensed",
 })
@@ -33,9 +35,19 @@ export default function RootLayout({
       className={cn("antialiased", robotoCondensed.className)}
     >
       <body>
-        <ThemeProvider>
-          {children}
-        </ThemeProvider>
+        <ClerkProvider
+          appearance={{
+            layout: {
+              unsafe_disableDevelopmentModeWarnings: true,
+            },
+            theme: shadcn
+          }}
+        >
+          <ThemeProvider>
+            <Header />
+            {children}
+          </ThemeProvider>
+        </ClerkProvider>
       </body>
     </html>
   )
