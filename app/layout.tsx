@@ -40,7 +40,21 @@ export default function RootLayout({
             layout: {
               unsafe_disableDevelopmentModeWarnings: true,
             },
-            theme: shadcn
+            theme: shadcn,
+            variables: {
+              colorPrimary: "#7b57ff",
+              colorTextOnPrimaryBackground: "#ffffff",
+            },
+            elements: {
+              formButtonPrimary:
+                "bg-[linear-gradient(180deg,#8f71ff_0%,#7b57ff_50%,#6841ff_100%)] text-white shadow-[inset_0_1px_0_0_rgba(255,255,255,0.35),0_2px_8px_rgba(104,65,255,0.35)] hover:brightness-110 hover:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.45),0_4px_16px_rgba(124,87,255,0.45)] active:translate-y-px active:brightness-95 border-0 font-semibold transition-all",
+              footerActionLink:
+                "text-[#7b57ff] hover:text-[#8f71ff] font-medium transition-colors",
+              formFieldAction:
+                "text-[#7b57ff] hover:text-[#8f71ff] font-medium transition-colors",
+              identityPreviewEditButton:
+                "text-[#7b57ff] hover:text-[#8f71ff] font-medium transition-colors",
+            },
           }}
         >
           <ThemeProvider>
