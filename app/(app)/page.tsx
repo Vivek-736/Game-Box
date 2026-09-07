@@ -18,7 +18,8 @@ export default function Page() {
           What should we build today?
         </EmptyTitle>
         <EmptyDescription className="text-muted-foreground">
-          Build your own racers, shooters, puzzles and whole worlds using your own words. If you can describe it, you can play it.
+          Build your own racers, shooters, puzzles and whole worlds using your
+          own words. If you can describe it, you can play it.
         </EmptyDescription>
       </EmptyHeader>
     </Empty>
