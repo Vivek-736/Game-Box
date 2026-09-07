@@ -4,7 +4,6 @@ import { ClerkProvider } from "@clerk/nextjs"
 import { shadcn } from "@clerk/ui/themes"
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
-import { Header } from "@/components/header"
 import { cn } from "@/lib/utils"
 
 const robotoCondensed = Roboto_Condensed({
@@ -58,7 +57,6 @@ export default function RootLayout({
           }}
         >
           <ThemeProvider>
-            <Header />
             {children}
           </ThemeProvider>
         </ClerkProvider>
