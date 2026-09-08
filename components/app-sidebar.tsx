@@ -33,10 +33,17 @@ import {
 import {
   Popover,
   PopoverContent,
+  PopoverHeader,
+  PopoverTitle,
   PopoverTrigger,
 } from "@/components/ui/popover"
+import type { Game } from "@/lib/db/schema"
 
-export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
+  games?: Game[]
+}
+
+export function AppSidebar({ games = [], ...props }: AppSidebarProps) {
   const pathname = usePathname()
   const { state } = useSidebar()
   const isCollapsed = state === "collapsed"
@@ -116,19 +123,51 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                       sideOffset={8}
                       className="w-64 p-3"
                     >
-                      <div className="flex flex-col gap-2">
-                        <div className="text-xs font-semibold text-muted-foreground px-1">
+                      <PopoverHeader className="px-1 pb-1">
+                        <PopoverTitle className="text-xs font-semibold text-muted-foreground">
                           Recents
-                        </div>
+                        </PopoverTitle>
+                      </PopoverHeader>
+                      {games.length > 0 ? (
+                        <SidebarMenu className="max-h-64 overflow-y-auto">
+                          {games.map((game) => (
+                            <SidebarMenuItem key={game.id}>
+                              <SidebarMenuButton
+                                render={<Link href={`/games/${game.id}`} />}
+                                tooltip={game.title}
+                                isActive={pathname === `/games/${game.id}`}
+                              >
+                                <MessageSquare className="size-4" />
+                                <span className="truncate">{game.title}</span>
+                              </SidebarMenuButton>
+                            </SidebarMenuItem>
+                          ))}
+                        </SidebarMenu>
+                      ) : (
                         <Empty className="border border-dashed p-4 rounded-xl text-center">
                           <EmptyDescription className="text-xs text-muted-foreground">
                             Your games will live here.
                           </EmptyDescription>
                         </Empty>
-                      </div>
+                      )}
                     </PopoverContent>
                   </Popover>
                 </SidebarMenuItem>
+              </SidebarMenu>
+            ) : games.length > 0 ? (
+              <SidebarMenu>
+                {games.map((game) => (
+                  <SidebarMenuItem key={game.id}>
+                    <SidebarMenuButton
+                      render={<Link href={`/games/${game.id}`} />}
+                      tooltip={game.title}
+                      isActive={pathname === `/games/${game.id}`}
+                    >
+                      <MessageSquare className="size-4" />
+                      <span className="truncate">{game.title}</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
               </SidebarMenu>
             ) : (
               <div className="px-2">
@@ -161,6 +200,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
+        
         {isCollapsed ? (
           <div className="flex items-center justify-center">
             <UserButton
