@@ -1,6 +1,8 @@
 import Image from "next/image"
+import { ChatComposer } from "@/components/chat-composer"
 import {
   Empty,
+  EmptyContent,
   EmptyDescription,
   EmptyHeader,
   EmptyMedia,
@@ -22,6 +24,9 @@ export default function Page() {
           own words. If you can describe it, you can play it.
         </EmptyDescription>
       </EmptyHeader>
+      <EmptyContent className="w-full max-w-2xl">
+        <ChatComposer />
+      </EmptyContent>
     </Empty>
   )
 }
