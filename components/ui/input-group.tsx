@@ -138,7 +138,7 @@ function InputGroupTextarea({
     <textarea
       data-slot="input-group-control"
       className={cn(
-        "flex field-sizing-content flex-1 resize-none rounded-none border-0 bg-transparent py-2 shadow-none outline-none ring-0",
+        "flex flex-1 resize-none rounded-none border-0 bg-transparent py-2 shadow-none outline-none ring-0",
         className
       )}
       {...props}
