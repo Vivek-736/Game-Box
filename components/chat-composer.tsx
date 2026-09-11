@@ -19,40 +19,70 @@ import {
   InputGroupAddon,
   InputGroupTextarea,
 } from "@/components/ui/input-group"
-import { createGame } from "@/lib/games/actions"
 
-export function ChatComposer() {
-  const [title, setTitle] = React.useState("")
-  const [isPending, startTransition] = React.useTransition()
+export interface ChatComposerProps {
+  value?: string
+  defaultValue?: string
+  onValueChange?: (value: string) => void
+  onChange?: (e: React.ChangeEvent<HTMLTextAreaElement>) => void
+  onSubmit?: (value: string) => void
+  isPending?: boolean
+  disabled?: boolean
+  placeholder?: string
+  className?: string
+  autoFocus?: boolean
+}
 
-  const handleCreateGame = (customTitle?: string) => {
-    const titleToCreate = (customTitle ?? title).trim()
-    
-    if (!titleToCreate || isPending) return
+export function ChatComposer({
+  value: controlledValue,
+  defaultValue = "",
+  onValueChange,
+  onChange,
+  onSubmit,
+  isPending = false,
+  disabled = false,
+  placeholder = "Describe the game you want to build...",
+  className,
+  autoFocus,
+}: ChatComposerProps) {
+  const [uncontrolledValue, setUncontrolledValue] = React.useState(defaultValue)
+  const isControlled = controlledValue !== undefined
+  const value = isControlled ? controlledValue : uncontrolledValue
 
-    startTransition(async () => {
-      try {
-        await createGame(titleToCreate)
-        setTitle("")
-      } catch (error) {
-        console.error("Failed to create game:", error)
-      }
-    })
+  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    onChange?.(e)
+    onValueChange?.(e.target.value)
+    if (!isControlled) {
+      setUncontrolledValue(e.target.value)
+    }
   }
 
+  const handleSubmit = () => {
+    const trimmed = value.trim()
+    if (!trimmed || isPending || disabled) return
+
+    onSubmit?.(trimmed)
+    if (!isControlled) {
+      setUncontrolledValue("")
+    }
+  }
+
+  const isDisabled = disabled || isPending
+
   return (
-    <div className="w-full">
+    <div className={className ?? "w-full"}>
       <InputGroup className="h-auto flex-col items-stretch rounded-2xl border-input/80 bg-background/60 p-2 shadow-sm backdrop-blur-xs transition-all focus-within:ring-2 focus-within:ring-ring/20">
         <InputGroupTextarea
-          placeholder="Describe the game you want to build..."
+          placeholder={placeholder}
           className="h-12 min-h-12 max-h-12 w-full resize-none overflow-y-auto py-1 text-base placeholder:text-muted-foreground/70 md:text-sm"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          disabled={isPending}
+          value={value}
+          onChange={handleChange}
+          disabled={isDisabled}
+          autoFocus={autoFocus}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault()
-              handleCreateGame()
+              handleSubmit()
             }
           }}
         />
@@ -84,8 +114,8 @@ export function ChatComposer() {
           <Button
             size="icon"
             className="size-8 rounded-full"
-            disabled={isPending || !title.trim()}
-            onClick={() => handleCreateGame()}
+            disabled={isDisabled || !value.trim()}
+            onClick={handleSubmit}
           >
             {isPending ? (
               <Loader2 className="size-4 animate-spin" />
