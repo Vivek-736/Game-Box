@@ -12,11 +12,11 @@ export default async function AppLayout({
   const games = await listGames()
 
   return (
-    <SidebarProvider defaultOpen={true}>
+    <SidebarProvider defaultOpen={true} className="h-svh max-h-svh overflow-hidden">
       <AppSidebar games={games} />
-      <SidebarInset>
+      <SidebarInset className="flex h-svh max-h-svh flex-1 flex-col overflow-hidden">
         <Header />
-        <div className="flex flex-1 flex-col">
+        <div className="flex flex-1 flex-col min-h-0 overflow-hidden">
           {children}
         </div>
       </SidebarInset>

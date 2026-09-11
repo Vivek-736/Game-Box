@@ -12,7 +12,7 @@ export default async function GamePage({
   await params
   
   return (
-    <div className="flex flex-1 flex-col h-svh pt-14 overflow-hidden">
+    <div className="flex flex-1 flex-col h-full min-h-0 overflow-hidden">
       <ChatThread />
     </div>
   )
