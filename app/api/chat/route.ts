@@ -1,6 +1,7 @@
 import { auth } from "@clerk/nextjs/server"
 import { createGoogle } from "@ai-sdk/google"
 import {
+  consumeStream,
   convertToModelMessages,
   createUIMessageStream,
   createUIMessageStreamResponse,
@@ -8,6 +9,9 @@ import {
   toUIMessageStream,
   type UIMessage,
 } from "ai"
+import { db } from "@/lib/db"
+import { games } from "@/lib/db/schema"
+import { and, eq } from "drizzle-orm"
 
 export const maxDuration = 60
 
@@ -33,6 +37,7 @@ async function runPuterFallback(
       : typeof m.content === "string"
         ? m.content
         : ""
+        
     return {
       role: m.role || "user",
       content: textContent,
@@ -122,13 +127,26 @@ async function runPuterFallback(
 }
 
 export async function POST(req: Request) {
-  const { userId } = await auth()
+  const { orgId, userId } = await auth()
+  const currentOrgId = orgId ?? userId
 
-  if (!userId) {
+  if (!currentOrgId) {
     return new Response("Unauthorized", { status: 401 })
   }
 
-  const { messages = [] }: { messages?: UIMessage[] } = await req.json()
+  const { messages = [], gameId }: { messages?: UIMessage[]; gameId?: string } = await req.json()
+
+  if (gameId) {
+    const [game] = await db
+      .select({ id: games.id })
+      .from(games)
+      .where(and(eq(games.id, gameId), eq(games.orgId, currentOrgId)))
+      .limit(1)
+
+    if (!game) {
+      return new Response("Game not found", { status: 404 })
+    }
+  }
 
   const normalizedMessages: UIMessage[] = messages.map((m: any, idx) => {
     if (Array.isArray(m.parts)) return m
@@ -140,6 +158,19 @@ export async function POST(req: Request) {
   })
 
   const stream = createUIMessageStream({
+    originalMessages: normalizedMessages,
+    onEnd: async ({ messages: updatedMessages }) => {
+      if (gameId && currentOrgId) {
+        try {
+          await db
+            .update(games)
+            .set({ messages: updatedMessages })
+            .where(and(eq(games.id, gameId), eq(games.orgId, currentOrgId)))
+        } catch (dbError) {
+          console.error("Failed to persist messages to game:", dbError)
+        }
+      }
+    },
     async execute({ writer }) {
       let googleSucceeded = false
       const bufferedChunks: any[] = []
@@ -204,5 +235,8 @@ export async function POST(req: Request) {
     },
   })
 
-  return createUIMessageStreamResponse({ stream })
+  return createUIMessageStreamResponse({
+    stream,
+    consumeSseStream: consumeStream,
+  })
 }

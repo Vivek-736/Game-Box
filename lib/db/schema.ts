@@ -1,9 +1,10 @@
-import { pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 
 export const games = pgTable("games", {
   id: uuid("id").primaryKey().defaultRandom(),
   orgId: text("org_id").notNull(),
   title: text("title").notNull(),
+  messages: jsonb("messages").$type<any[]>().default([]).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()
     .notNull(),

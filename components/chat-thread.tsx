@@ -23,7 +23,9 @@ export interface ChatMessage {
 }
 
 export interface ChatThreadProps extends React.ComponentProps<"div"> {
-  initialMessages?: ChatMessage[]
+  gameId: string
+  initialMessages?: any[]
+  initialPrompt?: string
 }
 
 function getMessageText(message: any): string {
@@ -37,18 +39,60 @@ function getMessageText(message: any): string {
 }
 
 export function ChatThread({
+  gameId,
+  initialMessages = [],
+  initialPrompt,
   className,
   ...props
 }: ChatThreadProps) {
   const [input, setInput] = React.useState("")
   const viewportRef = React.useRef<HTMLDivElement>(null)
   const isAtBottomRef = React.useRef(true)
+  const initialPromptSubmittedRef = React.useRef(false)
+
+  const normalizedInitialMessages = React.useMemo(() => {
+    return (initialMessages || []).map((m: any, idx: number) => {
+      if (Array.isArray(m.parts)) return m
+      return {
+        id: m.id || `msg-${idx}`,
+        role: m.role || "user",
+        parts: [{ type: "text", text: typeof m.content === "string" ? m.content : "" }],
+      }
+    })
+  }, [initialMessages])
 
   const { messages, sendMessage, status } = useChat({
+    id: gameId,
+    messages: normalizedInitialMessages,
     transport: new DefaultChatTransport({
       api: "/api/chat",
+      body: {
+        gameId,
+      },
     }),
   })
+
+  React.useEffect(() => {
+    if (
+      initialPrompt &&
+      !initialPromptSubmittedRef.current &&
+      normalizedInitialMessages.length === 0
+    ) {
+      initialPromptSubmittedRef.current = true
+
+      if (typeof window !== "undefined") {
+        const url = new URL(window.location.href)
+        if (url.searchParams.has("prompt")) {
+          url.searchParams.delete("prompt")
+          const cleanUrl = url.pathname + (url.search ? url.search : "")
+          window.history.replaceState(null, "", cleanUrl)
+        }
+      }
+
+      isAtBottomRef.current = true
+      sendMessage({ text: initialPrompt })
+    }
+  }, [initialPrompt, normalizedInitialMessages.length, sendMessage])
 
   const isGenerating = status === "submitted" || status === "streaming"
 
