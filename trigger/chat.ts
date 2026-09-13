@@ -1,10 +1,12 @@
 import { chat, upsertIncomingMessage } from "@trigger.dev/sdk/ai";
 import { createGoogle } from "@ai-sdk/google";
-import { createUIMessageStream, streamText, toUIMessageStream } from "ai";
+import { createUIMessageStream, streamText, toUIMessageStream, stepCountIs } from "ai";
 import { db } from "@/lib/db";
 import { games } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { createGameSandbox } from "@/lib/daytona/utils";
+import { gameSystemPrompt } from "@/lib/games/instructions";
+import { createGameTools } from "@/lib/games/tools";
 
 const google = createGoogle({
   apiKey: process.env.GEMINI_API_KEY,
@@ -13,7 +15,8 @@ const google = createGoogle({
 async function runPuterFallback(
   messages: any[],
   writer: { write: (part: any) => void },
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  systemPrompt?: string
 ) {
   const authToken = process.env.PUTER_AUTH_TOKEN;
   const formattedMessages = messages.map((m: any) => {
@@ -34,6 +37,10 @@ async function runPuterFallback(
 
     return { role: m.role || "user", content: textContent };
   });
+
+  if (systemPrompt) {
+    formattedMessages.unshift({ role: "system", content: systemPrompt });
+  }
 
   const body = JSON.stringify({
     interface: "puter-chat-completion",
@@ -107,7 +114,7 @@ async function runPuterFallback(
 
 export const gameChat = chat.agent({
   id: "game-chat",
-  tools: {},
+  tools: ({ chatId }) => createGameTools(chatId),
   hydrateMessages: async ({ chatId, trigger, incomingMessages }) => {
     const [game] = await db
       .select({ messages: games.messages })
@@ -148,8 +155,10 @@ export const gameChat = chat.agent({
               const result = streamText({
                 ...chat.toStreamTextOptions({ tools }),
                 model: google("gemini-3.6-flash"),
+                system: gameSystemPrompt,
                 messages,
                 abortSignal: signal,
+                stopWhen: stepCountIs(15),
               });
 
               const reader = result.stream.getReader();
@@ -158,16 +167,9 @@ export const gameChat = chat.agent({
                 const { done, value } = await reader.read();
                 if (done) break;
 
-                if (value.type === "error") {
-                  throw value.error;
-                }
-
                 bufferedChunks.push(value);
-
-                if (value.type === "text-start" || value.type === "text-delta") {
-                  googleSucceeded = true;
-                  break;
-                }
+                googleSucceeded = true;
+                break;
               }
 
               if (signal?.aborted) {
@@ -213,12 +215,13 @@ export const gameChat = chat.agent({
             }
 
             try {
-              await runPuterFallback(messages, writer, signal);
+              await runPuterFallback(messages, writer, signal, gameSystemPrompt);
             } catch (fallbackError: any) {
               if (signal?.aborted || fallbackError?.name === "AbortError") {
                 return;
               }
               console.error("Puter fallback failed:", fallbackError);
+              
               writer.write({
                 type: "error",
                 errorText: fallbackError?.message || "An error occurred while generating a response.",

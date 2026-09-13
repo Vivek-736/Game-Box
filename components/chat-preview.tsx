@@ -93,7 +93,7 @@ export function ChatPreview({ gameId, sandboxId, className }: ChatPreviewProps) 
             title="Game Preview"
             className="h-full w-full border-0 bg-white"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-pointer-lock"
           />
         ) : null}
       </div>
