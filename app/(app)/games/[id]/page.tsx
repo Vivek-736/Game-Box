@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation"
-import { ChatThread } from "@/components/chat-thread"
+import { GameChat } from "@/components/game-chat"
 import { getGame } from "@/lib/games/queries"
 
 interface GamePageProps {
@@ -33,9 +33,10 @@ export default async function GamePage({
   
   return (
     <div className="flex flex-1 flex-col h-full min-h-0 overflow-hidden">
-      <ChatThread
+      <GameChat
         key={game.id}
         gameId={game.id}
+        sandboxId={game.sandboxId}
         initialMessages={game.messages ?? []}
         initialPrompt={prompt}
       />
