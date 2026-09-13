@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import Image from "next/image"
+import { useRouter } from "next/navigation"
 import { ChatComposer } from "@/components/chat-composer"
 import { Button } from "@/components/ui/button"
 import {
@@ -16,6 +17,7 @@ import { SUGGESTIONS } from "@/lib/game/suggestion"
 import { createGame } from "@/lib/games/actions"
 
 export default function Page() {
+  const router = useRouter()
   const [value, setValue] = React.useState("")
   const [isPending, startTransition] = React.useTransition()
 
@@ -25,8 +27,8 @@ export default function Page() {
 
     startTransition(async () => {
       try {
-        await createGame(title)
-        setValue("")
+        const newGame = await createGame(title)
+        router.push(`/games/${newGame.id}?prompt=${encodeURIComponent(title)}`)
       } catch (error) {
         console.error("Failed to create game:", error)
       }
