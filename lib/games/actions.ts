@@ -19,10 +19,8 @@ async function generateGameTitle(prompt: string): Promise<string> {
   try {
     const { text } = await generateText({
       model: google("gemini-3.6-flash"),
-      messages: [
-        { role: "system", content: systemInstruction },
-        { role: "user", content: prompt },
-      ],
+      instructions: systemInstruction,
+      prompt,
     })
 
     const cleaned = text.replace(/["'*#_]/g, "").trim()

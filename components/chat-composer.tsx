@@ -6,6 +6,7 @@ import {
   ChevronDown,
   Grip,
   Loader2,
+  Square,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -26,6 +27,7 @@ export interface ChatComposerProps {
   onValueChange?: (value: string) => void
   onChange?: (e: React.ChangeEvent<HTMLTextAreaElement>) => void
   onSubmit?: (value: string) => void
+  onStop?: () => void
   isPending?: boolean
   disabled?: boolean
   placeholder?: string
@@ -39,6 +41,7 @@ export function ChatComposer({
   onValueChange,
   onChange,
   onSubmit,
+  onStop,
   isPending = false,
   disabled = false,
   placeholder = "Describe the game you want to build...",
@@ -67,7 +70,18 @@ export function ChatComposer({
     }
   }
 
-  const isDisabled = disabled || isPending
+  const canStop = isPending && Boolean(onStop)
+
+  const handleButtonClick = (e: React.MouseEvent) => {
+    e.preventDefault()
+    if (canStop) {
+      onStop?.()
+    } else {
+      handleSubmit()
+    }
+  }
+
+  const isButtonDisabled = canStop ? false : (disabled || isPending || !value.trim())
 
   return (
     <div className={className ?? "w-full"}>
@@ -77,12 +91,14 @@ export function ChatComposer({
           className="h-12 min-h-12 max-h-12 w-full resize-none overflow-y-auto py-1 text-base placeholder:text-muted-foreground/70 md:text-sm"
           value={value}
           onChange={handleChange}
-          disabled={isDisabled}
+          disabled={disabled || isPending}
           autoFocus={autoFocus}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault()
-              handleSubmit()
+              if (!isPending) {
+                handleSubmit()
+              }
             }
           }}
         />
@@ -113,16 +129,21 @@ export function ChatComposer({
 
           <Button
             size="icon"
-            className="size-8 rounded-full"
-            disabled={isDisabled || !value.trim()}
-            onClick={handleSubmit}
+            className="size-8 rounded-full transition-all"
+            disabled={isButtonDisabled}
+            onClick={handleButtonClick}
+            title={canStop ? "Stop generating" : "Send message"}
           >
-            {isPending ? (
+            {canStop ? (
+              <Square className="size-3 fill-current" />
+            ) : isPending ? (
               <Loader2 className="size-4 animate-spin" />
             ) : (
               <ArrowUp className="size-4" />
             )}
-            <span className="sr-only">Send message</span>
+            <span className="sr-only">
+              {canStop ? "Stop generating" : "Send message"}
+            </span>
           </Button>
         </InputGroupAddon>
       </InputGroup>
