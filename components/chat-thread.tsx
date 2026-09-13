@@ -3,7 +3,9 @@
 import * as React from "react"
 import Image from "next/image"
 import { useChat } from "@ai-sdk/react"
-import { DefaultChatTransport } from "ai"
+import { useTriggerChatTransport } from "@trigger.dev/sdk/chat/react"
+import type { gameChat } from "@/trigger/chat"
+import { mintChatAccessToken, startChatSession } from "@/app/actions"
 import { cn } from "@/lib/utils"
 import {
   Message,
@@ -35,6 +37,7 @@ function getMessageText(message: any): string {
       .map((p: any) => p.text)
       .join("")
   }
+  
   return typeof message.content === "string" ? message.content : ""
 }
 
@@ -61,16 +64,26 @@ export function ChatThread({
     })
   }, [initialMessages])
 
-  const { messages, sendMessage, status } = useChat({
+  const transport = useTriggerChatTransport<typeof gameChat>({
+    task: "game-chat",
+    accessToken: ({ chatId }) => mintChatAccessToken(chatId),
+    startSession: ({ chatId, clientData }) =>
+      startChatSession({ chatId, clientData }),
+  })
+
+  const { messages, sendMessage, stop: aiStop, status } = useChat({
     id: gameId,
     messages: normalizedInitialMessages,
-    transport: new DefaultChatTransport({
-      api: "/api/chat",
-      body: {
-        gameId,
-      },
-    }),
+    transport,
+    resume: normalizedInitialMessages.length > 0,
   })
+
+  const isGenerating = status === "submitted" || status === "streaming"
+
+  const handleStop = React.useCallback(() => {
+    transport.stopGeneration(gameId)
+    aiStop()
+  }, [transport, gameId, aiStop])
 
   React.useEffect(() => {
     if (
@@ -93,8 +106,6 @@ export function ChatThread({
       sendMessage({ text: initialPrompt })
     }
   }, [initialPrompt, normalizedInitialMessages.length, sendMessage])
-
-  const isGenerating = status === "submitted" || status === "streaming"
 
   const handleScroll = () => {
     const el = viewportRef.current
@@ -209,6 +220,7 @@ export function ChatThread({
           value={input}
           onValueChange={setInput}
           onSubmit={handleSendMessage}
+          onStop={handleStop}
           isPending={isGenerating}
         />
       </div>

@@ -5,6 +5,7 @@ export const games = pgTable("games", {
   orgId: text("org_id").notNull(),
   title: text("title").notNull(),
   messages: jsonb("messages").$type<any[]>().default([]).notNull(),
+  lastEventId: text("last_event_id"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()
     .notNull(),

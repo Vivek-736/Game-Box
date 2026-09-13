@@ -27,7 +27,7 @@
     "@neon/env": "^1.2.1",
     "@neondatabase/serverless": "^1.1.0",
     "@shadcn/react": "^0.3.1",
-    "@trigger.dev/sdk": "^4.5.16",
+    "@trigger.dev/sdk": "4.5.16",
     "ai": "^7.0.97",
     "class-variance-authority": "^0.7.1",
     "cmdk": "^1.1.1",
@@ -51,7 +51,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-    "@trigger.dev/build": "^4.5.16",
+    "@trigger.dev/build": "4.5.16",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
