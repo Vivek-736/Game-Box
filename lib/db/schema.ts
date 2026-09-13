@@ -4,6 +4,7 @@ export const games = pgTable("games", {
   id: uuid("id").primaryKey().defaultRandom(),
   orgId: text("org_id").notNull(),
   title: text("title").notNull(),
+  sandboxId: text("sandbox_id"),
   messages: jsonb("messages").$type<any[]>().default([]).notNull(),
   lastEventId: text("last_event_id"),
   createdAt: timestamp("created_at", { withTimezone: true })

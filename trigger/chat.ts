@@ -4,6 +4,7 @@ import { createUIMessageStream, streamText, toUIMessageStream } from "ai";
 import { db } from "@/lib/db";
 import { games } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
+import { createGameSandbox } from "@/lib/daytona/utils";
 
 const google = createGoogle({
   apiKey: process.env.GEMINI_API_KEY,
@@ -124,6 +125,9 @@ export const gameChat = chat.agent({
     }
 
     return stored;
+  },
+  onChatStart: async ({ chatId }) => {
+    await createGameSandbox(chatId);
   },
   onTurnComplete: async ({ chatId, uiMessages, lastEventId }) => {
     await db
