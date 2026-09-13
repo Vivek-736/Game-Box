@@ -2,8 +2,9 @@ import { daytona } from "@/lib/daytona/client";
 import { db } from "@/lib/db";
 import { games } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
+import type { Sandbox } from "@daytona/sdk";
 
-export async function createGameSandbox(gameId: string) {
+export async function createGameSandbox(gameId: string): Promise<{ sandbox: Sandbox }> {
   const [existingGame] = await db
     .select({ sandboxId: games.sandboxId })
     .from(games)
@@ -11,10 +12,22 @@ export async function createGameSandbox(gameId: string) {
     .limit(1);
 
   if (existingGame?.sandboxId) {
-    return existingGame.sandboxId;
+    const sandbox = await daytona.get(existingGame.sandboxId);
+    if (sandbox.state && sandbox.state !== "started") {
+      if (sandbox.state === "stopped" || sandbox.state === "paused" || sandbox.state === "archived") {
+        await sandbox.start(60);
+      } else {
+        await sandbox.waitUntilStarted(60);
+      }
+    }
+    return { sandbox };
   }
 
   const sandbox = await daytona.create();
+
+  if (sandbox.state && sandbox.state !== "started") {
+    await sandbox.waitUntilStarted(60);
+  }
 
   const b64 = Buffer.from("New game").toString("base64");
   
@@ -27,28 +40,65 @@ export async function createGameSandbox(gameId: string) {
     .set({ sandboxId: sandbox.id })
     .where(eq(games.id, gameId));
 
-  return sandbox;
+  return { sandbox };
 }
 
-export async function startGameServer(gameIdOrSandboxId: string, port = 3000) {
+/**
+ * Provides a guaranteed, running Sandbox instance for a given game.
+ * - Resolves gameId or direct sandboxId.
+ * - If no sandbox exists yet or the existing sandbox was deleted, automatically provisions & seeds one.
+ * - Guarantees the returned sandbox is in the "started" state and ready for tool operations.
+ */
+export async function getGameSandbox(gameIdOrSandboxId: string): Promise<{ sandbox: Sandbox }> {
   let sandboxId = gameIdOrSandboxId;
+  let matchedGameId: string | null = null;
 
-  // Check if passed string is a gameId in database
   const [game] = await db
-    .select({ sandboxId: games.sandboxId })
+    .select({ id: games.id, sandboxId: games.sandboxId })
     .from(games)
     .where(eq(games.id, gameIdOrSandboxId))
     .limit(1);
 
-  if (game?.sandboxId) {
-    sandboxId = game.sandboxId;
+  if (game) {
+    matchedGameId = game.id;
+    if (game.sandboxId) {
+      sandboxId = game.sandboxId;
+    } else {
+      // Game exists but has no sandbox yet -> create one
+      return await createGameSandbox(game.id);
+    }
   }
 
   if (!sandboxId) {
-    throw new Error(`Sandbox ID not found for game: ${gameIdOrSandboxId}`);
+    throw new Error(`Invalid game or sandbox ID: ${gameIdOrSandboxId}`);
   }
 
-  const sandbox = await daytona.get(sandboxId);
+  let sandbox: Sandbox;
+  try {
+    sandbox = await daytona.get(sandboxId);
+  } catch (err) {
+    // If retrieval failed (e.g. sandbox deleted or expired) and we have a gameId, recreate it
+    if (matchedGameId) {
+      console.warn(`Sandbox ${sandboxId} not found, provisioning replacement for game ${matchedGameId}:`, err);
+      return await createGameSandbox(matchedGameId);
+    }
+    throw err;
+  }
+
+  // Ensure the sandbox is running
+  if (sandbox.state && sandbox.state !== "started") {
+    if (sandbox.state === "stopped" || sandbox.state === "paused" || sandbox.state === "archived") {
+      await sandbox.start(60);
+    } else {
+      await sandbox.waitUntilStarted(60);
+    }
+  }
+
+  return { sandbox };
+}
+
+export async function startGameServer(gameIdOrSandboxId: string, port = 3000): Promise<{ sandbox: Sandbox }> {
+  const { sandbox } = await getGameSandbox(gameIdOrSandboxId);
 
   // 1. Health-check for an existing running server on port
   let isHealthy = false;
@@ -98,21 +148,7 @@ export async function startGameServer(gameIdOrSandboxId: string, port = 3000) {
     }
   }
 
-  // 3. Obtain preview link credentials from Daytona
-  const previewInfo = await sandbox.getPreviewLink(port);
-
-  let signedUrl: string | undefined;
-  try {
-    const signed = await sandbox.getSignedPreviewUrl(port, 3600);
-    signedUrl = signed.url;
-  } catch {}
-
   return {
     sandbox,
-    sandboxId,
-    port,
-    url: previewInfo.url,
-    token: previewInfo.token,
-    signedUrl,
   };
 }

@@ -21,7 +21,15 @@ export async function GET(
       );
     }
 
-    const serverInfo = await startGameServer(game.id);
+    const { sandbox } = await startGameServer(game.id);
+
+    const previewInfo = await sandbox.getPreviewLink(3000);
+
+    let signedUrl: string | undefined;
+    try {
+      const signed = await sandbox.getSignedPreviewUrl(3000, 3600);
+      signedUrl = signed.url;
+    } catch {}
 
     const accept = req.headers.get("accept") || "";
     if (accept.includes("text/html") && !accept.includes("application/json")) {
@@ -31,7 +39,9 @@ export async function GET(
     return NextResponse.json({
       url: `/api/games/${id}/preview/proxy`,
       sandboxId: game.sandboxId,
-      directUrl: serverInfo.signedUrl || serverInfo.url,
+      previewUrl: previewInfo.url,
+      token: previewInfo.token,
+      directUrl: signedUrl || previewInfo.url,
     });
   } catch (error: any) {
     return NextResponse.json(
