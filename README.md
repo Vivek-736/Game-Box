@@ -205,3 +205,11 @@ This bundles your background task files, registers the `game-chat` agent, and de
    - If Google free-tier quotas or 429 limits are encountered, it automatically switches to the Puter AI driver (`gpt-4o-mini`) without interrupting the user.
 5. **Direct Sandbox Manipulation**: Tools write `index.html`, `style.css`, and `game.js` directly into the Daytona container.
 6. **Live Preview Opening**: The split-pane preview automatically slides open and reloads via an internal revision counter so players can test their game instantly.
+
+---
+
+<div align="center">
+
+**Made with 💖 by Vivek**
+
+</div>
