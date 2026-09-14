@@ -149,14 +149,26 @@ export function createGameTools(gameId: string) {
 
           const currentContent = Buffer.from(output, "base64").toString("utf-8");
 
-          if (!currentContent.includes(target_content)) {
-            return {
-              success: false,
-              error: `Target content not found in ${path}. Ensure whitespace, line endings, and characters match exactly.`,
-            };
+          let actualTarget = target_content;
+          let fileContent = currentContent;
+
+          if (!fileContent.includes(actualTarget)) {
+            // Try matching with normalized newlines (\r\n vs \n)
+            const normalizedTarget = target_content.replace(/\r\n/g, "\n");
+            const normalizedFile = currentContent.replace(/\r\n/g, "\n");
+
+            if (normalizedFile.includes(normalizedTarget)) {
+              fileContent = normalizedFile;
+              actualTarget = normalizedTarget;
+            } else {
+              return {
+                success: false,
+                error: `Target content not found in ${path}. Ensure whitespace, line endings, and characters match exactly.`,
+              };
+            }
           }
 
-          const occurrences = currentContent.split(target_content).length - 1;
+          const occurrences = fileContent.split(actualTarget).length - 1;
           if (occurrences > 1 && !allow_multiple) {
             return {
               success: false,
@@ -165,8 +177,8 @@ export function createGameTools(gameId: string) {
           }
 
           const newContent = allow_multiple
-            ? currentContent.replaceAll(target_content, replacement_content)
-            : currentContent.replace(target_content, replacement_content);
+            ? fileContent.replaceAll(actualTarget, replacement_content)
+            : fileContent.replace(actualTarget, replacement_content);
 
           const b64 = Buffer.from(newContent, "utf-8").toString("base64");
           const writeCmd = `echo "${b64}" | base64 -d > "${fullPath}"`;

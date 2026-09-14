@@ -65,6 +65,11 @@ export async function GET(req: NextRequest, { params }: RouteProps) {
     responseHeaders.delete("content-length");
     responseHeaders.delete("transfer-encoding");
 
+    // Force strict no-cache so browsers always fetch the latest edits to game assets
+    responseHeaders.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0");
+    responseHeaders.set("Pragma", "no-cache");
+    responseHeaders.set("Expires", "0");
+
     const mime = getMimeType(subpath);
     if (mime) {
       responseHeaders.set("content-type", mime);
@@ -76,13 +81,14 @@ export async function GET(req: NextRequest, { params }: RouteProps) {
       responseHeaders.set("content-type", "text/html; charset=utf-8");
       let html = await res.text();
       const baseTag = `<base href="/api/games/${id}/preview/proxy/">`;
+      const noCacheMeta = `<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"><meta http-equiv="Pragma" content="no-cache"><meta http-equiv="Expires" content="0">`;
       if (!html.includes("<base ")) {
         if (html.includes("<head>")) {
-          html = html.replace("<head>", `<head>\n  ${baseTag}`);
+          html = html.replace("<head>", `<head>\n  ${baseTag}\n  ${noCacheMeta}`);
         } else if (html.includes("<HEAD>")) {
-          html = html.replace("<HEAD>", `<HEAD>\n  ${baseTag}`);
+          html = html.replace("<HEAD>", `<HEAD>\n  ${baseTag}\n  ${noCacheMeta}`);
         } else {
-          html = `${baseTag}\n${html}`;
+          html = `${baseTag}\n${noCacheMeta}\n${html}`;
         }
       }
 

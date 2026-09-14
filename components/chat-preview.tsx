@@ -1,16 +1,24 @@
 "use client"
 
 import * as React from "react"
-import { Loader2, RefreshCw, AlertCircle } from "lucide-react"
+import { Loader2, RefreshCw, AlertCircle, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 export interface ChatPreviewProps {
   gameId: string
   sandboxId?: string | null
+  revision?: number
+  onClose?: () => void
   className?: string
 }
 
-export function ChatPreview({ gameId, sandboxId, className }: ChatPreviewProps) {
+export function ChatPreview({
+  gameId,
+  sandboxId,
+  revision = 0,
+  onClose,
+  className,
+}: ChatPreviewProps) {
   const [previewUrl, setPreviewUrl] = React.useState<string | null>(null)
   const [isLoading, setIsLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
@@ -44,26 +52,56 @@ export function ChatPreview({ gameId, sandboxId, className }: ChatPreviewProps) 
     fetchPreviewUrl()
   }, [fetchPreviewUrl])
 
+  // Automatically reload preview when trigger/chat turn finishes (revision increments)
+  const prevRevisionRef = React.useRef(revision)
+  React.useEffect(() => {
+    if (revision > 0 && revision !== prevRevisionRef.current) {
+      setKey((prev) => prev + 1)
+    }
+    prevRevisionRef.current = revision
+  }, [revision])
+
   const handleRefresh = () => {
     setKey((prev) => prev + 1)
   }
+
+  // Construct uncached iframe URL using key revision
+  const iframeSrc = React.useMemo(() => {
+    if (!previewUrl) return null
+    const sep = previewUrl.includes("?") ? "&" : "?"
+    return `${previewUrl}${sep}_r=${key}`
+  }, [previewUrl, key])
 
   return (
     <div className={`relative flex flex-col h-full w-full min-h-0 overflow-hidden bg-background ${className ?? ""}`}>
       {/* Top toolbar */}
       <div className="flex h-10 shrink-0 items-center justify-between border-b border-border/60 bg-muted/30 px-3 text-xs text-muted-foreground">
         <span className="font-medium tracking-wide">Game Preview</span>
-        <Button
-          variant="ghost"
-          size="icon-xs"
-          onClick={handleRefresh}
-          title="Reload preview"
-          disabled={isLoading || !previewUrl}
-          className="size-7 text-muted-foreground hover:text-foreground"
-        >
-          <RefreshCw className="size-3.5" />
-          <span className="sr-only">Reload preview</span>
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            onClick={handleRefresh}
+            title="Reload preview"
+            disabled={isLoading || !previewUrl}
+            className="size-7 text-muted-foreground hover:text-foreground"
+          >
+            <RefreshCw className="size-3.5" />
+            <span className="sr-only">Reload preview</span>
+          </Button>
+          {onClose && (
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              onClick={onClose}
+              title="Close preview"
+              className="size-7 text-muted-foreground hover:text-foreground"
+            >
+              <X className="size-3.5" />
+              <span className="sr-only">Close preview</span>
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Preview content area */}
@@ -86,10 +124,10 @@ export function ChatPreview({ gameId, sandboxId, className }: ChatPreviewProps) 
               Retry
             </Button>
           </div>
-        ) : previewUrl ? (
+        ) : iframeSrc ? (
           <iframe
             key={key}
-            src={previewUrl}
+            src={iframeSrc}
             title="Game Preview"
             className="h-full w-full border-0 bg-white"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
