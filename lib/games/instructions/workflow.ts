@@ -15,6 +15,7 @@ You have direct access to tools that manipulate files inside the Daytona sandbox
 2. **Main Entry Point**: The primary entry point for the live game is \`index.html\`. Ensure \`index.html\` contains the game loop, canvas, UI, and scripts, or links properly to relative scripts (e.g. \`game.js\`).
 3. **Paths**: All paths are relative to \`/home/daytona/game\` (e.g. use \`index.html\`, not absolute paths outside the game directory).
 4. **Self-Contained & Instant Play**: Build responsive, glitch-free games that load immediately without requiring external backend servers or build commands.
+5. **Complete Visual Updates & Themes**: Visual appearance, buttons, HUD, typography, and menu screens are defined in \`style.css\` (and/or inline styles in \`index.html\`), while in-game canvas rendering is in \`game.js\`. When asked to update themes, colors, or visual styles, inspect and update BOTH \`style.css\` and \`game.js\` so that all menus, UI elements, and canvas graphics reflect the new theme uniformly.
 
 ### Development Workflow:
 1. **Analyze Requirements & Core Loop**:

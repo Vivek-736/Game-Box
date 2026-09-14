@@ -18,7 +18,7 @@ async function generateGameTitle(prompt: string): Promise<string> {
   // 1. Try Gemini 3.6 Flash
   try {
     const { text } = await generateText({
-      model: google("gemini-3.6-flash"),
+      model: google("gemini-2.5-flash"),
       instructions: systemInstruction,
       prompt,
     })

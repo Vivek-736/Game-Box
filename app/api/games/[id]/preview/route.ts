@@ -14,13 +14,6 @@ export async function GET(
       return NextResponse.json({ error: "Game not found" }, { status: 404 });
     }
 
-    if (!game.sandboxId) {
-      return NextResponse.json(
-        { error: "Sandbox not created yet" },
-        { status: 400 }
-      );
-    }
-
     const { sandbox } = await startGameServer(game.id);
 
     const previewInfo = await sandbox.getPreviewLink(3000);
@@ -38,7 +31,7 @@ export async function GET(
 
     return NextResponse.json({
       url: `/api/games/${id}/preview/proxy`,
-      sandboxId: game.sandboxId,
+      sandboxId: sandbox.id,
       previewUrl: previewInfo.url,
       token: previewInfo.token,
       directUrl: signedUrl || previewInfo.url,
