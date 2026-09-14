@@ -4,13 +4,51 @@ import { createUIMessageStream, streamText, toUIMessageStream, stepCountIs } fro
 import { db } from "@/lib/db";
 import { games } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
-import { createGameSandbox } from "@/lib/daytona/utils";
+import { createGameSandbox, getGameSandbox } from "@/lib/daytona/utils";
 import { gameSystemPrompt } from "@/lib/games/instructions";
-import { createGameTools } from "@/lib/games/tools";
+import { createGameTools, resolveSafeGamePath } from "@/lib/games/tools";
 
 const google = createGoogle({
-  apiKey: process.env.GEMINI_API_KEY,
+  apiKey: process.env.GEMINI_API_KEY || "",
 });
+
+function extractFilesFromResponse(text: string): Array<{ path: string; content: string }> {
+  const files: Array<{ path: string; content: string }> = [];
+
+  // Pattern 1: ```lang (file="filename" | path="filename" | filename)
+  const codeBlockRegex =
+    /```(?:[a-zA-Z0-9_-]+)?(?:\s+(?:file|path)=["']?([^\s"'\n]+)["']?|\s+([a-zA-Z0-9_\-./]+\.[a-zA-Z0-9]+))?\n([\s\S]*?)```/g;
+  let match;
+  while ((match = codeBlockRegex.exec(text)) !== null) {
+    const filename = match[1] || match[2];
+    const content = match[3];
+    if (filename && content && content.trim()) {
+      files.push({ path: filename.trim(), content });
+    }
+  }
+
+  // Pattern 2: Full HTML code block if no named files matched
+  if (files.length === 0) {
+    const htmlBlock = text.match(/```html\n([\s\S]*?)```/i);
+    if (htmlBlock && htmlBlock[1] && htmlBlock[1].trim()) {
+      files.push({ path: "index.html", content: htmlBlock[1] });
+    }
+  }
+
+  // Pattern 3: Raw HTML containing <!DOCTYPE html or <html
+  if (files.length === 0 && (text.includes("<!DOCTYPE html") || text.includes("<html"))) {
+    const startIdx =
+      text.indexOf("<!DOCTYPE html") !== -1
+        ? text.indexOf("<!DOCTYPE html")
+        : text.indexOf("<html");
+    const endIdx = text.lastIndexOf("</html>");
+    if (startIdx !== -1 && endIdx !== -1) {
+      files.push({ path: "index.html", content: text.slice(startIdx, endIdx + 7) });
+    }
+  }
+
+  return files;
+}
 
 function extractPuterText(parsed: any): string {
   if (!parsed) return "";
@@ -58,10 +96,13 @@ async function runPuterFallback(
   messages: any[],
   writer: { write: (part: any) => void },
   signal?: AbortSignal,
-  systemPrompt?: string
+  systemPrompt?: string,
+  chatId?: string
 ) {
   const authToken = process.env.PUTER_AUTH_TOKEN;
-  const formattedMessages = messages.map((m: any) => {
+  const formattedMessages: any[] = [];
+
+  for (const m of messages) {
     let textContent = "";
     if (typeof m.content === "string") {
       textContent = m.content;
@@ -77,15 +118,31 @@ async function runPuterFallback(
         .join("");
     }
 
-    return { role: m.role || "user", content: textContent };
-  });
-
-  if (systemPrompt) {
-    formattedMessages.unshift({ role: "system", content: systemPrompt });
+    if (textContent.trim()) {
+      formattedMessages.push({ role: m.role || "user", content: textContent.trim() });
+    }
   }
+
+  const puterInstruction = `${systemPrompt || ""}\n\nIMPORTANT: Output the complete, fully functional HTML5 game directly inside a single code block labeled file="index.html":
+\`\`\`html file="index.html"
+<!DOCTYPE html>
+<html>
+<head>
+  <style>/* CSS */</style>
+</head>
+<body>
+  <canvas id="gameCanvas"></canvas>
+  <script>/* JavaScript game loop & controls */</script>
+</body>
+</html>
+\`\`\`
+Ensure all styles, canvas loops, controls, sound effects (Web Audio API synthesizers), and mechanics are fully implemented inside index.html so the game is immediately playable in the browser!`;
+
+  formattedMessages.unshift({ role: "system", content: puterInstruction });
 
   const textPartId = `text-puter-${Date.now()}`;
   let hasStartedStream = false;
+  let accumulatedText = "";
 
   const startStreamIfNeeded = () => {
     if (!hasStartedStream) {
@@ -98,6 +155,7 @@ async function runPuterFallback(
 
   const handleTextChunk = (text: string) => {
     if (!text) return;
+    accumulatedText += text;
     startStreamIfNeeded();
     writer.write({ type: "text-delta", id: textPartId, delta: text });
   };
@@ -128,105 +186,148 @@ async function runPuterFallback(
     }
   };
 
-  try {
-    const streamBody = JSON.stringify({
-      interface: "puter-chat-completion",
-      driver: "ai-chat",
-      test_mode: false,
-      method: "complete",
-      args: {
-        messages: formattedMessages,
-        stream: true,
-        model: "gemini-2.5-flash",
-      },
-      auth_token: authToken,
-    });
+  const puterModels = ["gpt-4o-mini", "gemini-2.5-flash"];
+  let puterSuccess = false;
 
-    const response = await fetch("https://api.puter.com/drivers/call", {
-      method: "POST",
-      headers: { "Content-Type": "text/plain;actually=json" },
-      body: streamBody,
-      signal,
-    });
+  for (const pModel of puterModels) {
+    if (signal?.aborted) break;
+    try {
+      const streamBody = JSON.stringify({
+        interface: "puter-chat-completion",
+        driver: "ai-chat",
+        test_mode: false,
+        method: "complete",
+        args: {
+          messages: formattedMessages,
+          stream: true,
+          model: pModel,
+        },
+        auth_token: authToken,
+      });
 
-    if (response.ok && response.body) {
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
+      const response = await fetch("https://api.puter.com/drivers/call", {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;actually=json" },
+        body: streamBody,
+        signal,
+      });
 
-      while (true) {
-        if (signal?.aborted) break;
-        const { done, value } = await reader.read();
-        if (done) break;
+      if (response.ok && response.body) {
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
 
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-
-        for (const line of lines) {
+        while (true) {
           if (signal?.aborted) break;
-          processLine(line);
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
+
+          for (const line of lines) {
+            if (signal?.aborted) break;
+            processLine(line);
+          }
         }
+
+        if (!signal?.aborted && buffer.trim()) {
+          processLine(buffer);
+        }
+
+        puterSuccess = true;
+        break;
       }
+    } catch (streamError: any) {
+      if (signal?.aborted || streamError?.name === "AbortError") return;
+      console.warn(
+        `Puter live streaming with ${pModel} failed, trying non-streaming:`,
+        streamError?.message || streamError
+      );
 
-      if (!signal?.aborted && buffer.trim()) {
-        processLine(buffer);
+      try {
+        const nonStreamBody = JSON.stringify({
+          interface: "puter-chat-completion",
+          driver: "ai-chat",
+          test_mode: false,
+          method: "complete",
+          args: {
+            messages: formattedMessages,
+            stream: false,
+            model: pModel,
+          },
+          auth_token: authToken,
+        });
+
+        const nonStreamResponse = await fetch("https://api.puter.com/drivers/call", {
+          method: "POST",
+          headers: { "Content-Type": "text/plain;actually=json" },
+          body: nonStreamBody,
+          signal,
+        });
+
+        if (nonStreamResponse.ok) {
+          const data = await nonStreamResponse.json();
+          const content =
+            data?.result?.message?.content ||
+            data?.result?.text ||
+            data?.message?.content ||
+            "";
+          if (content) {
+            handleTextChunk(content);
+            puterSuccess = true;
+            break;
+          }
+        }
+      } catch (nonStreamErr: any) {
+        console.warn(`Puter non-streaming with ${pModel} failed:`, nonStreamErr?.message || nonStreamErr);
       }
-    } else {
-      throw new Error(`Puter streaming returned HTTP ${response.status}`);
-    }
-  } catch (streamError: any) {
-    if (signal?.aborted || streamError?.name === "AbortError") return;
-    console.warn(
-      "Puter live streaming failed, attempting non-streaming fallback:",
-      streamError?.message || streamError
-    );
-
-    const nonStreamBody = JSON.stringify({
-      interface: "puter-chat-completion",
-      driver: "ai-chat",
-      test_mode: false,
-      method: "complete",
-      args: {
-        messages: formattedMessages,
-        stream: false,
-        model: "gemini-2.5-flash",
-      },
-      auth_token: authToken,
-    });
-
-    const nonStreamResponse = await fetch("https://api.puter.com/drivers/call", {
-      method: "POST",
-      headers: { "Content-Type": "text/plain;actually=json" },
-      body: nonStreamBody,
-      signal,
-    });
-
-    if (!nonStreamResponse.ok) {
-      throw new Error(`Puter API error: HTTP ${nonStreamResponse.status}`);
-    }
-
-    const data = await nonStreamResponse.json();
-    const content =
-      data?.result?.message?.content ||
-      data?.result?.text ||
-      data?.message?.content ||
-      "";
-    if (content) {
-      handleTextChunk(content);
     }
   }
 
   if (hasStartedStream) {
     writer.write({ type: "text-end", id: textPartId });
-    writer.write({ type: "finish-step" });
-    writer.write({ type: "finish", finishReason: "stop" });
-    writer.write({
-      type: "data-turn-complete",
-      data: { timestamp: Date.now() },
-      transient: true,
-    });
   }
+
+  // Save any generated files directly to the Daytona sandbox!
+  if (chatId && accumulatedText.trim()) {
+    const files = extractFilesFromResponse(accumulatedText);
+    if (files.length > 0) {
+      try {
+        const { sandbox } = await getGameSandbox(chatId);
+        for (const file of files) {
+          const fullPath = resolveSafeGamePath(file.path, false);
+          const b64 = Buffer.from(file.content, "utf-8").toString("base64");
+          const writeCmd = `mkdir -p "$(dirname "${fullPath}")" && echo "${b64}" | base64 -d > "${fullPath}"`;
+          await sandbox.process.executeCommand(writeCmd);
+
+          writer.write({
+            type: "tool-write_file",
+            toolName: "write_file",
+            state: "output-available",
+            input: { path: file.path },
+            output: {
+              success: true,
+              path: file.path,
+              bytesWritten: Buffer.byteLength(file.content, "utf-8"),
+              message: `Successfully wrote ${file.path}`,
+            },
+          });
+        }
+      } catch (saveErr: any) {
+        console.error("Error saving Puter files to Daytona sandbox:", saveErr);
+      }
+    }
+  }
+
+  writer.write({ type: "finish-step" });
+  writer.write({ type: "finish", finishReason: "stop" });
+  writer.write({
+    type: "data-turn-complete",
+    data: { timestamp: Date.now() },
+    transient: true,
+  });
 }
 
 export const gameChat = chat.agent({
@@ -259,55 +360,97 @@ export const gameChat = chat.agent({
       .set({ messages: uiMessages, lastEventId })
       .where(eq(games.id, chatId));
   },
-  run: async ({ messages, tools, signal }) => {
+  run: async ({ messages, tools, signal, chatId }: any) => {
     return {
       toUIMessageStream(options: any = {}) {
         return createUIMessageStream({
           ...options,
           async execute({ writer }) {
-            try {
-              const result = streamText({
-                ...chat.toStreamTextOptions({ tools }),
-                model: google("gemini-2.5-flash"),
-                system: gameSystemPrompt,
-                messages,
-                abortSignal: signal,
-                stopWhen: stepCountIs(15),
-                maxRetries: 0,
-              });
+            const googleModels = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-2.5-flash"];
+            let googleSuccess = false;
+            let hasWrittenChunks = false;
 
-              const uiStream = toUIMessageStream({ stream: result.stream });
-              const reader = uiStream.getReader();
+            for (const modelName of googleModels) {
+              if (signal?.aborted) return;
+              try {
+                const result = streamText({
+                  ...chat.toStreamTextOptions({ tools }),
+                  model: google(modelName),
+                  system: gameSystemPrompt,
+                  messages,
+                  abortSignal: signal,
+                  stopWhen: stepCountIs(15),
+                  maxRetries: 0,
+                });
 
-              while (true) {
-                if (signal?.aborted) break;
-                const { done, value } = await reader.read();
-                if (done) break;
-                writer.write(value);
+                const uiStream = toUIMessageStream({ stream: result.stream });
+                const reader = uiStream.getReader();
+                let modelEmittedChunks = false;
+                let hasStreamError = false;
+                const buffer: any[] = [];
+
+                while (true) {
+                  if (signal?.aborted) break;
+                  const { done, value } = await reader.read();
+                  if (done) break;
+
+                  if (value?.type === "error") {
+                    console.warn(`Google ${modelName} stream error:`, value?.errorText);
+                    hasStreamError = true;
+                    break;
+                  }
+
+                  if (!hasWrittenChunks) {
+                    if (value?.type === "start" || value?.type === "start-step") {
+                      buffer.push(value);
+                      continue;
+                    }
+                    for (const b of buffer) {
+                      writer.write(b);
+                    }
+                    buffer.length = 0;
+                    hasWrittenChunks = true;
+                  }
+
+                  modelEmittedChunks = true;
+                  writer.write(value);
+                }
+
+                if (hasStreamError && !hasWrittenChunks) {
+                  continue;
+                }
+
+                if (modelEmittedChunks && !hasStreamError) {
+                  writer.write({
+                    type: "data-turn-complete",
+                    data: { timestamp: Date.now() },
+                    transient: true,
+                  });
+                  googleSuccess = true;
+                  break;
+                }
+              } catch (err: any) {
+                if (signal?.aborted || err?.name === "AbortError") {
+                  return;
+                }
+                console.warn(
+                  `Google ${modelName} failed, trying next candidate:`,
+                  err?.message || err
+                );
+                if (hasWrittenChunks) {
+                  break;
+                }
               }
-
-              writer.write({
-                type: "data-turn-complete",
-                data: { timestamp: Date.now() },
-                transient: true,
-              });
-              return;
-            } catch (err: any) {
-              if (signal?.aborted || err?.name === "AbortError") {
-                return;
-              }
-              console.warn(
-                "Google gemini-2.5-flash failed, falling back to Puter:",
-                err?.message || err
-              );
             }
 
-            if (signal?.aborted) {
+            if (googleSuccess || signal?.aborted) {
               return;
             }
 
+            // Fallback to Puter if all Google models fail
             try {
-              await runPuterFallback(messages, writer, signal, gameSystemPrompt);
+              console.log("Google models exhausted, falling back to Puter AI driver...");
+              await runPuterFallback(messages, writer, signal, gameSystemPrompt, chatId);
             } catch (fallbackError: any) {
               if (signal?.aborted || fallbackError?.name === "AbortError") {
                 return;

@@ -1,7 +1,23 @@
-import { Daytona } from "@daytona/sdk"
+import { Daytona } from "@daytona/sdk";
 
-if (!process.env.DAYTONA_API_KEY) {
-  throw new Error("DAYTONA_API_KEY is not set")
+let _daytona: Daytona | null = null;
+
+export function getDaytonaClient(): Daytona {
+  if (!_daytona) {
+    _daytona = new Daytona({
+      apiKey: process.env.DAYTONA_API_KEY,
+    });
+  }
+  return _daytona;
 }
 
-export const daytona = new Daytona();
+export const daytona = new Proxy({} as Daytona, {
+  get(_target, prop) {
+    const client = getDaytonaClient();
+    const value = (client as any)[prop];
+    if (typeof value === "function") {
+      return value.bind(client);
+    }
+    return value;
+  },
+});
