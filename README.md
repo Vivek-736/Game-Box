@@ -34,6 +34,20 @@ Powered by agentic AI pair programming, cloud-isolated Daytona sandboxes, and re
 
 ---
 
+## 📸 Screenshots
+
+### AI Game Studio & Live Preview
+*Real-time split-screen interface featuring the streaming agent chat terminal on the left and the live playable Daytona sandbox on the right.*
+
+![GameBox Live Game Studio](./public/screenshot-2.png)
+
+### Dashboard & Game Discovery
+*Intuitive dashboard for crafting prompt ideas, choosing starter presets, and exploring recent games.*
+
+![GameBox Dashboard](./public/screenshot-1.png)
+
+---
+
 ## System Architecture
 
 ```mermaid
